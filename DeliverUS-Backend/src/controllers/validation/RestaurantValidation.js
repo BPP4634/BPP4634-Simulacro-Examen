@@ -1,6 +1,27 @@
 import { check } from 'express-validator'
 import { checkFileIsImage, checkFileMaxSize } from './FileValidationHelper.js'
+import { Restaurant } from '../../models/models.js'
 const maxFileSize = 2000000 // around 2Mb
+
+const chekPromoted = async (promo, ownerId) => {
+  if (promo) {
+    try {
+      const restaurant = await Restaurant.findAll({
+        where: {
+          userId: ownerId,
+          promoted: true
+        }
+      })
+      if (restaurant.length !== 0) {
+        return Promise.reject(new Error('No more than one promoted.'))
+      } return Promise.resolve()
+    } catch (err) {
+      return Promise.reject(new Error(err))
+    }
+  } else {
+    return Promise.resolve('ok')
+  }
+}
 
 const create = [
   check('name').exists().isString().isLength({ min: 1, max: 255 }).trim(),
@@ -12,6 +33,9 @@ const create = [
   check('email').optional({ nullable: true, checkFalsy: true }).isString().isEmail().trim(),
   check('phone').optional({ nullable: true, checkFalsy: true }).isString().isLength({ min: 1, max: 255 }).trim(),
   check('restaurantCategoryId').exists({ checkNull: true }).isInt({ min: 1 }).toInt(),
+  check('promoted').custom((value, { req }) => {
+    return chekPromoted(value, req.user.id)
+  }).withMessage('Please put a valid promo'),
   check('userId').not().exists(),
   check('heroImage').custom((value, { req }) => {
     return checkFileIsImage(req, 'heroImage')
@@ -36,6 +60,9 @@ const update = [
   check('email').optional({ nullable: true, checkFalsy: true }).isString().isEmail().trim(),
   check('phone').optional({ nullable: true, checkFalsy: true }).isString().isLength({ min: 1, max: 255 }).trim(),
   check('restaurantCategoryId').exists({ checkNull: true }).isInt({ min: 1 }).toInt(),
+  check('promoted').custom((value, { req }) => {
+    return chekPromoted(value, req.user.id)
+  }).withMessage('Please put a valid promo'),
   check('userId').not().exists(),
   check('heroImage').custom((value, { req }) => {
     return checkFileIsImage(req, 'heroImage')

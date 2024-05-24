@@ -1,4 +1,4 @@
-import { Restaurant, Product, RestaurantCategory, ProductCategory } from '../models/models.js'
+import { sequelizeSession, Restaurant, Product, RestaurantCategory, ProductCategory } from '../models/models.js'
 
 const index = async function (req, res) {
   try {
@@ -10,7 +10,7 @@ const index = async function (req, res) {
         model: RestaurantCategory,
         as: 'restaurantCategory'
       },
-        order: [[{ model: RestaurantCategory, as: 'restaurantCategory' }, 'name', 'ASC']]
+        order: [['promoted', 'DESC'], [{ model: RestaurantCategory, as: 'restaurantCategory' }, 'name', 'ASC']]
       }
     )
     res.json(restaurants)
@@ -25,6 +25,7 @@ const indexOwner = async function (req, res) {
       {
         attributes: { exclude: ['userId'] },
         where: { userId: req.user.id },
+        order: [['promoted', 'DESC']],
         include: [{
           model: RestaurantCategory,
           as: 'restaurantCategory'
@@ -80,6 +81,28 @@ const update = async function (req, res) {
   }
 }
 
+const promote = async function (req, res) {
+  const t = await sequelizeSession.transaction()
+  try {
+    const restaurantPromotedBefore = await Restaurant.findOne({
+      where: {
+        userId: req.user.id,
+        promoted: true
+      }
+    })
+    if (restaurantPromotedBefore) {
+      await Restaurant.update({ promoted: false }, { where: { id: restaurantPromotedBefore.id } }, { transaction: t })
+    }
+    await Restaurant.update({ promoted: true }, { where: { id: req.params.restaurantId } }, { transaction: t })
+    await t.commit() // confirm all operations
+    const newPromotedRestaurant = await Restaurant.findByPk(req.params.restaurantId)
+    res.json(newPromotedRestaurant)
+  } catch (err) {
+    await t.rollback() // in case of error, rollback all the operations executed in the context of the transaction
+    res.status(500).send(err)
+  }
+}
+
 const destroy = async function (req, res) {
   try {
     const result = await Restaurant.destroy({ where: { id: req.params.restaurantId } })
@@ -101,6 +124,7 @@ const RestaurantController = {
   create,
   show,
   update,
-  destroy
+  destroy,
+  promote
 }
 export default RestaurantController
